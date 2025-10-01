@@ -34,6 +34,7 @@ MICROSOFT_CLIENT_ID=a4796fb5-ecd7-4002-a8e7-93416ad0c1b1
 MICROSOFT_CLIENT_SECRET=seu_client_secret_aqui
 MICROSOFT_TENANT_ID=78481405-a361-415a-b544-49e3018b711d
 TRANSCRIPTION_API_URL=https://liacrm-transcription-api.up.railway.app/api/transcribe
+TRANSCRIPTION_API_KEY=seu_api_key_secreto_aqui
 WEBHOOK_VALIDATION_TOKEN=teams-watcher-webhook-secret-2024
 PORT=8000
 ```

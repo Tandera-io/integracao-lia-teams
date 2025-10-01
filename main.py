@@ -17,6 +17,7 @@ CLIENT_ID = os.environ.get("MICROSOFT_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("MICROSOFT_CLIENT_SECRET")
 TENANT_ID = os.environ.get("MICROSOFT_TENANT_ID")
 TRANSCRIPTION_API_URL = os.environ.get("TRANSCRIPTION_API_URL")
+TRANSCRIPTION_API_KEY = os.environ.get("TRANSCRIPTION_API_KEY")
 WEBHOOK_VALIDATION_TOKEN = os.environ.get("WEBHOOK_VALIDATION_TOKEN")
 
 # Scopes necessários para o Microsoft Graph
@@ -96,6 +97,9 @@ def send_to_transcription_api(video_url: str, meeting_title: str = "Teams Meetin
             "Content-Type": "application/json"
         }
         
+        if TRANSCRIPTION_API_KEY:
+            headers["X-Api-Key"] = TRANSCRIPTION_API_KEY
+        
         response = requests.post(TRANSCRIPTION_API_URL, json=payload, headers=headers)
         response.raise_for_status()
         
@@ -105,6 +109,8 @@ def send_to_transcription_api(video_url: str, meeting_title: str = "Teams Meetin
         
     except requests.exceptions.RequestException as e:
         logger.error(f"Erro ao enviar para API de transcrição: {str(e)}")
+        if hasattr(e, 'response') and e.response is not None:
+            logger.error(f"Response status: {e.response.status_code}, body: {e.response.text}")
         return False
     except Exception as e:
         logger.error(f"Exceção ao enviar para API de transcrição: {str(e)}")
