@@ -300,10 +300,12 @@ async def health_check():
 @app.get("/api/TeamsWebhook")
 async def teams_webhook_get(validationToken: Optional[str] = Query(None)):
     """Validação do webhook do Microsoft Graph."""
-    logger.info("Validação de webhook recebida")
+    logger.info(f"Validação de webhook recebida com token: {validationToken}")
     if validationToken:
-        return PlainTextResponse(validationToken)
+        logger.info(f"Retornando token de validação: {validationToken}")
+        return PlainTextResponse(content=validationToken, status_code=200)
     else:
+        logger.error("Token de validação não fornecido")
         raise HTTPException(status_code=400, detail="Missing validation token")
 
 @app.post("/api/TeamsWebhook")
