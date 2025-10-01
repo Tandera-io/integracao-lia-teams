@@ -1,6 +1,5 @@
-azure-functions
-azure-identity
-azure-storage-blob
-azure-core
+fastapi
+uvicorn[standard]
 requests
 msal
+python-multipart

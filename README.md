@@ -1,144 +1,164 @@
-# Integração LIA Teams - Azure Function App
+# Teams Watcher Service - FastAPI
 
-Este repositório contém uma Azure Function App para integração automática com Microsoft Teams, capturando gravações de reuniões e enviando para a API de transcrição.
+Serviço de integração automática com Microsoft Teams para captura de gravações de reuniões e envio para API de transcrição.
 
-## Estrutura do Projeto
+## 🚀 Arquitetura
 
-- `CopyGraphToBlob/` - Função para copiar dados do Microsoft Graph para Azure Blob Storage
-- `TeamsWebhook/` - **NOVA** - Função que recebe webhooks do Microsoft Graph quando gravações são criadas
-- `SubscriptionManager/` - **NOVA** - Função para gerenciar subscrições de webhooks do Microsoft Graph
-- `host.json` - Configurações do host da Azure Function
-- `requirements.txt` - Dependências Python necessárias
-- `local.settings.json` - Configurações locais (não commitado)
+- **FastAPI**: Framework web moderno e rápido
+- **Microsoft Graph**: Integração com Teams para receber notificações de gravações
+- **Webhooks**: Recebimento automático de notificações quando gravações são criadas
+- **Railway**: Plataforma de deploy com controle total
 
-## Configuração
+## 📁 Estrutura do Projeto
 
-### 1. Configurar Credenciais
-
-Copie o arquivo `local.settings.json.example` para `local.settings.json` e configure:
-
-```json
-{
-  "IsEncrypted": false,
-  "Values": {
-    "AzureWebJobsStorage": "sua_connection_string_aqui",
-    "FUNCTIONS_WORKER_RUNTIME": "python",
-    "STORAGE_ACCOUNT_NAME": "seu_storage_account",
-    "MICROSOFT_CLIENT_ID": "seu_client_id_aqui",
-    "MICROSOFT_CLIENT_SECRET": "seu_client_secret_aqui",
-    "MICROSOFT_TENANT_ID": "seu_tenant_id_aqui",
-    "TRANSCRIPTION_API_URL": "https://liacrm-transcription-api.up.railway.app/api/transcribe",
-    "WEBHOOK_VALIDATION_TOKEN": "teams-watcher-webhook-secret-2024"
-  }
-}
+```
+├── main.py                 # Aplicação FastAPI principal
+├── requirements.txt        # Dependências Python
+├── Procfile               # Comando de inicialização para Railway
+├── runtime.txt            # Versão do Python
+├── README.md              # Documentação
+└── legacy/                # Código original Azure Functions (para referência)
+    ├── CopyGraphToBlob/
+    ├── TeamsWebhook/
+    └── SubscriptionManager/
 ```
 
-### 2. Instalar Dependências
+## ⚙️ Configuração
+
+### 1. Variáveis de Ambiente
+
+Configure as seguintes variáveis no Railway:
 
 ```bash
+MICROSOFT_CLIENT_ID=a4796fb5-ecd7-4002-a8e7-93416ad0c1b1
+MICROSOFT_CLIENT_SECRET=seu_client_secret_aqui
+MICROSOFT_TENANT_ID=78481405-a361-415a-b544-49e3018b711d
+TRANSCRIPTION_API_URL=https://liacrm-transcription-api.up.railway.app/api/transcribe
+WEBHOOK_VALIDATION_TOKEN=teams-watcher-webhook-secret-2024
+PORT=8000
+```
+
+### 2. Deploy no Railway
+
+1. Conecte o repositório GitHub ao Railway
+2. Configure as variáveis de ambiente
+3. O deploy será automático
+
+## 🔗 Endpoints da API
+
+### Informações Gerais
+- `GET /` - Informações sobre o serviço
+- `GET /health` - Health check
+
+### Webhook do Teams
+- `GET /api/TeamsWebhook?validationToken=TOKEN` - Validação do webhook
+- `POST /api/TeamsWebhook` - Recebe notificações de gravações
+
+### Gerenciamento de Subscrições
+- `GET /api/SubscriptionManager?action=list` - Lista subscrições ativas
+- `GET /api/SubscriptionManager?action=create&webhook_url=URL` - Cria nova subscrição
+- `GET /api/SubscriptionManager?action=renew&subscription_id=ID` - Renova subscrição
+- `GET /api/SubscriptionManager?action=delete&subscription_id=ID` - Deleta subscrição
+
+## 🎯 Como Usar
+
+### 1. Após o Deploy
+
+Sua aplicação estará disponível em: `https://seu-app.up.railway.app`
+
+### 2. Criar Subscrição
+
+```bash
+curl -X GET "https://seu-app.up.railway.app/api/SubscriptionManager?action=create&webhook_url=https://seu-app.up.railway.app/api/TeamsWebhook"
+```
+
+### 3. Verificar Subscrições
+
+```bash
+curl -X GET "https://seu-app.up.railway.app/api/SubscriptionManager?action=list"
+```
+
+### 4. Renovar Subscrição (a cada 50 minutos)
+
+```bash
+curl -X GET "https://seu-app.up.railway.app/api/SubscriptionManager?action=renew&subscription_id=SEU_SUBSCRIPTION_ID"
+```
+
+## 🔄 Fluxo de Funcionamento
+
+1. **Subscrição Ativa**: Serviço se inscreve para receber notificações do Microsoft Graph
+2. **Reunião Gravada**: Teams grava uma reunião automaticamente
+3. **Webhook Recebido**: Microsoft Graph envia notificação para `/api/TeamsWebhook`
+4. **Processamento**: Serviço obtém URL de download da gravação via Graph API
+5. **Transcrição**: URL é enviada para `liacrm-transcription-api.up.railway.app`
+6. **Resultado**: Transcrição é processada automaticamente
+
+## 🛠️ Desenvolvimento Local
+
+```bash
+# Instalar dependências
 pip install -r requirements.txt
+
+# Configurar variáveis de ambiente
+export MICROSOFT_CLIENT_ID="seu_client_id"
+export MICROSOFT_CLIENT_SECRET="seu_client_secret"
+export MICROSOFT_TENANT_ID="seu_tenant_id"
+export TRANSCRIPTION_API_URL="https://liacrm-transcription-api.up.railway.app/api/transcribe"
+
+# Executar aplicação
+uvicorn main:app --reload --port 8000
 ```
 
-### 3. Executar Localmente
+Acesse: `http://localhost:8000`
 
-```bash
-func start
-```
+## 📊 Monitoramento
 
-## Como Usar
+- **Logs**: Disponíveis no painel do Railway
+- **Health Check**: `GET /health`
+- **Métricas**: Painel do Railway mostra CPU, memória e requests
 
-### 1. Fazer Deploy da Function App
+## 🔒 Segurança
 
-Use o Azure CLI ou o portal do Azure para fazer o deploy da Function App.
+- ✅ Todas as credenciais via variáveis de ambiente
+- ✅ Nenhuma credencial hardcoded no código
+- ✅ Validação de webhooks do Microsoft Graph
+- ✅ Logs detalhados para auditoria
 
-### 2. Configurar Variáveis de Ambiente
-
-No Azure Portal, configure as seguintes variáveis de ambiente na sua Function App:
-
-- `MICROSOFT_CLIENT_ID`: ID do aplicativo registrado no Microsoft Entra ID
-- `MICROSOFT_CLIENT_SECRET`: Segredo do cliente do aplicativo
-- `MICROSOFT_TENANT_ID`: ID do tenant do Azure
-- `TRANSCRIPTION_API_URL`: URL da API de transcrição
-- `WEBHOOK_VALIDATION_TOKEN`: Token para validação de webhooks
-
-### 3. Criar Subscrição de Webhook
-
-Após o deploy, crie uma subscrição para receber notificações:
-
-```bash
-curl -X GET "https://sua-function-app.azurewebsites.net/api/SubscriptionManager?action=create&webhook_url=https://sua-function-app.azurewebsites.net/api/TeamsWebhook"
-```
-
-### 4. Gerenciar Subscrições
-
-```bash
-# Listar subscrições ativas
-curl -X GET "https://sua-function-app.azurewebsites.net/api/SubscriptionManager?action=list"
-
-# Renovar subscrição (necessário a cada hora)
-curl -X GET "https://sua-function-app.azurewebsites.net/api/SubscriptionManager?action=renew&subscription_id=SEU_SUBSCRIPTION_ID"
-
-# Deletar subscrição
-curl -X GET "https://sua-function-app.azurewebsites.net/api/SubscriptionManager?action=delete&subscription_id=SEU_SUBSCRIPTION_ID"
-```
-
-## Fluxo de Funcionamento
-
-1. **Subscrição**: O serviço se inscreve para receber notificações do Microsoft Graph quando gravações são criadas
-2. **Webhook**: Quando uma reunião é gravada, o Microsoft Graph envia uma notificação para `TeamsWebhook`
-3. **Processamento**: A função `TeamsWebhook` obtém a URL de download da gravação
-4. **Transcrição**: A URL é enviada para a API de transcrição (`liacrm-transcription-api.up.railway.app`)
-
-## Funções Disponíveis
-
-### TeamsWebhook
-- **URL**: `/api/TeamsWebhook`
-- **Métodos**: GET (validação), POST (notificações)
-- **Descrição**: Recebe webhooks do Microsoft Graph e processa gravações
-
-### SubscriptionManager
-- **URL**: `/api/SubscriptionManager`
-- **Parâmetros**:
-  - `action`: create, list, delete, renew
-  - `webhook_url`: URL do webhook (para create)
-  - `subscription_id`: ID da subscrição (para delete/renew)
-
-### CopyGraphToBlob (Legado)
-- **URL**: `/api/CopyGraphToBlob`
-- **Descrição**: Copia arquivos de URLs para Azure Blob Storage
-
-## Monitoramento
-
-- Verifique os logs da Function App no Azure Portal
-- As subscrições expiram a cada hora e precisam ser renovadas
-- Configure um Azure Logic App ou Timer Function para renovação automática
-
-## Permissões Necessárias
-
-O aplicativo registrado no Microsoft Entra ID precisa das seguintes permissões:
-- `OnlineMeetingRecording.Read.All` (Application)
-- Consentimento de administrador concedido
-
-## Troubleshooting
+## 🆘 Troubleshooting
 
 ### Webhook não recebe notificações
-1. Verifique se a subscrição está ativa
-2. Confirme se a URL do webhook está acessível publicamente
-3. Verifique os logs da Function App
+1. Verifique se a subscrição está ativa: `GET /api/SubscriptionManager?action=list`
+2. Confirme se a URL está acessível publicamente
+3. Verifique os logs no Railway
 
 ### Erro de autenticação
-1. Confirme as credenciais nas variáveis de ambiente
+1. Confirme as variáveis de ambiente no Railway
 2. Verifique se o Client Secret não expirou
-3. Confirme se as permissões foram concedidas
+3. Confirme se as permissões foram concedidas no Azure
 
 ### API de transcrição não recebe chamadas
-1. Verifique se a `TRANSCRIPTION_API_URL` está correta
+1. Verifique se `TRANSCRIPTION_API_URL` está correta
 2. Confirme se a API está online
 3. Verifique os logs para erros de rede
 
-## Segurança
+## 🔄 Migração do Azure Functions
 
-- **NUNCA** commite credenciais no código
-- Use variáveis de ambiente para todas as configurações sensíveis
-- O arquivo `local.settings.json` está no `.gitignore` para evitar commit acidental de credenciais
-- Renove o Client Secret periodicamente conforme políticas de segurança
+Este projeto foi migrado de Azure Functions para FastAPI mantendo:
+- ✅ **Mesma funcionalidade** de webhook
+- ✅ **Mesma integração** com Microsoft Graph  
+- ✅ **Mesmo envio** para transcription-api
+- ✅ **Mesmas credenciais** e configurações
+- ✅ **Mesma lógica** de negócio
+
+**Vantagens da migração:**
+- 🚀 Deploy mais simples no Railway
+- 📊 Melhor controle e monitoramento
+- 🔧 Mais flexibilidade para customizações
+- 💰 Potencial redução de custos
+
+## 📞 Suporte
+
+Para dúvidas ou problemas:
+1. Verifique os logs no Railway
+2. Consulte a documentação da Microsoft Graph
+3. Teste os endpoints individualmente
