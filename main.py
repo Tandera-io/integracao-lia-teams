@@ -256,9 +256,20 @@ def create_subscription(webhook_url: str, access_token: str) -> Optional[Dict[st
         return result
         
     except requests.exceptions.RequestException as e:
-        logger.error(f"Erro ao criar subscrição: {str(e)}")
-        if hasattr(e, 'response') and e.response:
-            logger.error(f"Resposta do erro: {e.response.text}")
+        if hasattr(e, "response") and e.response is not None:
+            log_http_error(
+                e.response,
+                "Erro ao criar subscrição",
+                {
+                    "webhook_url": webhook_url,
+                    "expiration": expiration_iso
+                }
+            )
+        else:
+            logger.error(
+                "Erro ao criar subscrição sem resposta",
+                extra={"webhook_url": webhook_url, "error": str(e)}
+            )
         return None
     except Exception as e:
         logger.error(f"Exceção ao criar subscrição: {str(e)}")
@@ -378,6 +389,15 @@ async def teams_webhook_get(validationToken: Optional[str] = Query(None)):
 async def teams_webhook_post(request: Request):
     """Recebe notificações do Microsoft Graph sobre gravações."""
     logger.info("TeamsWebhook POST recebido")
+
+    # Microsoft Graph envia uma chamada de validação com validationToken
+    validation_token = request.query_params.get("validationToken")
+    if validation_token:
+        logger.info(
+            "Respondendo validação de webhook",
+            extra={"validation_token": validation_token}
+        )
+        return PlainTextResponse(content=validation_token, status_code=200)
     
     try:
         req_body = await request.json()
