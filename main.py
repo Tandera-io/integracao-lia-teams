@@ -3,6 +3,8 @@ import os
 import json
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
+from uuid import uuid4
+
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import PlainTextResponse, JSONResponse
 import requests
@@ -30,6 +32,27 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
+def _format_extra(extra: Optional[Dict[str, Any]]) -> str:
+    if not extra:
+        return ""
+    try:
+        return f" | extra={json.dumps(extra, ensure_ascii=True)}"
+    except (TypeError, ValueError):
+        return ""
+
+
+def log_http_error(response: requests.Response, message: str, extra: Optional[Dict[str, Any]] = None) -> None:
+    details = {
+        "status": response.status_code,
+        "reason": response.reason,
+        "body": response.text[:1000],
+    }
+    if extra:
+        details.update(extra)
+    logger.error(f"{message} | details={json.dumps(details, ensure_ascii=True)}")
+
+
 def get_graph_access_token():
     """Obtém um token de acesso para o Microsoft Graph usando credenciais de aplicativo."""
     try:
@@ -46,7 +69,10 @@ def get_graph_access_token():
         if "access_token" in result:
             return result["access_token"]
         else:
-            logger.error(f"Erro ao obter token: {result.get('error_description', 'Erro desconhecido')}")
+            logger.error(
+                "Erro ao obter token do Graph",
+                extra={"error": result.get("error"), "description": result.get("error_description")}
+            )
             return None
     except Exception as e:
         logger.error(f"Exceção ao obter token: {str(e)}")
@@ -79,7 +105,13 @@ def get_recording_download_url(recording_id: str, access_token: str) -> Optional
         return None
         
     except requests.exceptions.RequestException as e:
-        logger.error(f"Erro ao obter URL de download: {str(e)}")
+        if e.response is not None:
+            log_http_error(e.response, "Erro ao obter URL de download do Graph", {"recording_id": recording_id})
+        else:
+            logger.error(
+                "Erro ao obter URL de download do Graph sem resposta",
+                extra={"recording_id": recording_id, "error": str(e)}
+            )
         return None
     except Exception as e:
         logger.error(f"Exceção ao obter URL de download: {str(e)}")
@@ -102,15 +134,25 @@ def send_to_transcription_api(video_url: str, meeting_title: str = "Teams Meetin
         
         response = requests.post(TRANSCRIPTION_API_URL, json=payload, headers=headers)
         response.raise_for_status()
-        
-        result = response.json()
-        logger.info(f"Transcrição iniciada com sucesso: {result}")
+
+        logger.info(
+            "Transcrição iniciada com sucesso",
+            extra={"status": response.status_code, "title": meeting_title}
+        )
         return True
         
     except requests.exceptions.RequestException as e:
-        logger.error(f"Erro ao enviar para API de transcrição: {str(e)}")
-        if hasattr(e, 'response') and e.response is not None:
-            logger.error(f"Response status: {e.response.status_code}, body: {e.response.text}")
+        if hasattr(e, "response") and e.response is not None:
+            log_http_error(
+                e.response,
+                "Erro ao enviar para API de transcrição",
+                {"title": meeting_title, "video_url": video_url}
+            )
+        else:
+            logger.error(
+                "Erro ao enviar para API de transcrição sem resposta",
+                extra={"title": meeting_title, "video_url": video_url, "error": str(e)}
+            )
         return False
     except Exception as e:
         logger.error(f"Exceção ao enviar para API de transcrição: {str(e)}")
@@ -118,21 +160,28 @@ def send_to_transcription_api(video_url: str, meeting_title: str = "Teams Meetin
 
 def process_recording_notification(notification_data: Dict[str, Any]) -> bool:
     """Processa uma notificação de nova gravação."""
+    correlation_id = str(uuid4())
     try:
         # Extrair informações da notificação
         resource = notification_data.get("resource", "")
         change_type = notification_data.get("changeType", "")
         
-        logger.info(f"Processando notificação: {change_type} para recurso: {resource}")
+        logger.info(
+            "Processando notificação",
+            extra={"correlation_id": correlation_id, "change_type": change_type, "resource": resource}
+        )
         
         if change_type != "created":
-            logger.info(f"Ignorando notificação do tipo: {change_type}")
+            logger.info(
+                "Ignorando notificação",
+                extra={"correlation_id": correlation_id, "motivo": "changeType diferente", "change_type": change_type}
+            )
             return True
         
         # Obter token de acesso
         access_token = get_graph_access_token()
         if not access_token:
-            logger.error("Não foi possível obter token de acesso")
+            logger.error("Não foi possível obter token de acesso", extra={"correlation_id": correlation_id})
             return False
         
         # Extrair ID da gravação do recurso
@@ -142,28 +191,39 @@ def process_recording_notification(notification_data: Dict[str, Any]) -> bool:
             recording_id = resource_parts[-1]
             call_id = resource_parts[-3]
             
-            logger.info(f"Processando gravação ID: {recording_id} da chamada: {call_id}")
+            context = {
+                "correlation_id": correlation_id,
+                "recording_id": recording_id,
+                "call_id": call_id,
+            }
+            logger.info("Buscando URL de download", extra=context)
             
             # Obter URL de download
             download_url = get_recording_download_url(recording_id, access_token)
             if not download_url:
-                logger.error(f"Não foi possível obter URL de download para: {recording_id}")
+                logger.error("Não foi possível obter URL de download", extra=context)
                 return False
             
             # Enviar para API de transcrição
             success = send_to_transcription_api(download_url, f"Teams Meeting - {call_id}")
             if success:
-                logger.info(f"Gravação {recording_id} enviada para transcrição com sucesso")
+                logger.info("Gravação enviada para transcrição com sucesso", extra=context)
                 return True
             else:
-                logger.error(f"Falha ao enviar gravação {recording_id} para transcrição")
+                logger.error("Falha ao enviar gravação para transcrição", extra=context)
                 return False
         else:
-            logger.warning(f"Formato de recurso não reconhecido: {resource}")
+            logger.warning(
+                "Formato de recurso não reconhecido",
+                extra={"correlation_id": correlation_id, "resource": resource}
+            )
             return False
             
     except Exception as e:
-        logger.error(f"Exceção ao processar notificação: {str(e)}")
+        logger.error(
+            "Exceção ao processar notificação",
+            extra={"correlation_id": correlation_id, "error": str(e)}
+        )
         return False
 
 # Funções para gerenciamento de subscrições
